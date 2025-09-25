@@ -80,11 +80,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }
 
-  const handleLogout = () => {
-    // TODO: Implement actual logout
-    localStorage.removeItem("auth_token")
-    localStorage.removeItem("subscription_status")
-    window.location.href = "/login"
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      })
+    } catch (error) {
+      console.error("Logout error:", error)
+    } finally {
+      window.location.href = "/login"
+    }
   }
 
   return (

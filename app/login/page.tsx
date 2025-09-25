@@ -31,20 +31,32 @@ export default function LoginPage() {
     }
 
     // Password validation
-    if (password.length < 8) {
-      setError("A senha deve ter pelo menos 8 caracteres")
+    if (password.length < 6) {
+      setError("A senha deve ter pelo menos 6 caracteres")
       setIsLoading(false)
       return
     }
 
     try {
-      // TODO: Implement actual authentication
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
 
-      // Simulate login success - redirect to dashboard
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(data.error || "Erro ao fazer login")
+        return
+      }
+
       window.location.href = "/dashboard"
     } catch (err) {
-      setError("Email ou senha incorretos")
+      console.error("Login error:", err)
+      setError("Erro de conexão. Tente novamente.")
     } finally {
       setIsLoading(false)
     }
@@ -93,7 +105,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
-                minLength={8}
+                minLength={6}
               />
             </div>
 

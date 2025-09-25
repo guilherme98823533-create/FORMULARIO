@@ -1,45 +1,18 @@
-// Database connection and query utilities
-// This file provides a centralized way to interact with the PostgreSQL database
+import { neon } from "@neondatabase/serverless"
 
-import { Pool, type PoolClient } from "pg"
-
-// Database connection pool
-let pool: Pool | null = null
-
-// Initialize database connection pool
-function getPool(): Pool {
-  if (!pool) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    })
-
-    // Handle pool errors
-    pool.on("error", (err) => {
-      console.error("Unexpected error on idle client", err)
-      process.exit(-1)
-    })
-  }
-
-  return pool
-}
+// Create SQL client using Neon
+const sql = neon(process.env.FORMULARIOPRO_DATABASE_URL!)
 
 // Execute a query with automatic connection management
 export async function query<T = any>(text: string, params?: any[]): Promise<T[]> {
-  const pool = getPool()
-  const client = await pool.connect()
-
   try {
-    const result = await client.query(text, params)
-    return result.rows
+    console.log("[v0] Executing query:", text, "with params:", params)
+    const result = await sql(text, params || [])
+    console.log("[v0] Query result:", result)
+    return result as T[]
   } catch (error) {
-    console.error("Database query error:", error)
+    console.error("[v0] Database query error:", error)
     throw error
-  } finally {
-    client.release()
   }
 }
 
@@ -50,29 +23,32 @@ export async function queryOne<T = any>(text: string, params?: any[]): Promise<T
 }
 
 // Execute multiple queries in a transaction
-export async function transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
-  const pool = getPool()
-  const client = await pool.connect()
-
+export async function transaction<T>(callback: (client: any) => Promise<T>): Promise<T> {
   try {
-    await client.query("BEGIN")
+    console.log("[v0] Starting transaction")
+    await sql("BEGIN")
+
+    // Create a client-like object that uses the same sql connection
+    const client = {
+      query: async (text: string, params?: any[]) => {
+        const result = await sql(text, params || [])
+        return { rows: result }
+      },
+    }
+
     const result = await callback(client)
-    await client.query("COMMIT")
+    await sql("COMMIT")
+    console.log("[v0] Transaction committed")
     return result
   } catch (error) {
-    await client.query("ROLLBACK")
-    console.error("Transaction error:", error)
+    console.error("[v0] Transaction error:", error)
+    try {
+      await sql("ROLLBACK")
+      console.log("[v0] Transaction rolled back")
+    } catch (rollbackError) {
+      console.error("[v0] Rollback error:", rollbackError)
+    }
     throw error
-  } finally {
-    client.release()
-  }
-}
-
-// Close the database connection pool
-export async function closePool(): Promise<void> {
-  if (pool) {
-    await pool.end()
-    pool = null
   }
 }
 
@@ -82,7 +58,7 @@ export async function healthCheck(): Promise<boolean> {
     await query("SELECT 1")
     return true
   } catch (error) {
-    console.error("Database health check failed:", error)
+    console.error("[v0] Database health check failed:", error)
     return false
   }
 }

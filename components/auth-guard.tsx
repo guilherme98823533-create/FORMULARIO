@@ -12,41 +12,57 @@ interface AuthGuardProps {
   requireSubscription?: boolean
 }
 
+interface User {
+  id: string
+  email: string
+  storeName: string
+  subscriptionStatus: string
+}
+
 export function AuthGuard({ children, requireAuth = true, requireSubscription = false }: AuthGuardProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [hasActiveSubscription, setHasActiveSubscription] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
   const router = useRouter()
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // TODO: Implement actual auth check
-        // For now, simulate auth check
-        await new Promise((resolve) => setTimeout(resolve, 500))
+        console.log("[v0] Checking authentication...")
 
-        // Simulate checking authentication
-        const token = localStorage.getItem("auth_token")
-        const authenticated = !!token
+        const response = await fetch("/api/auth/me", {
+          method: "GET",
+          credentials: "include", // Include cookies
+        })
 
-        // Simulate checking subscription
-        const subscription = localStorage.getItem("subscription_status")
-        const activeSubscription = subscription === "active"
+        if (response.ok) {
+          const data = await response.json()
+          console.log("[v0] Auth check successful:", data.user)
 
-        setIsAuthenticated(authenticated)
-        setHasActiveSubscription(activeSubscription)
+          setIsAuthenticated(true)
+          setUser(data.user)
 
-        if (requireAuth && !authenticated) {
-          router.push("/login")
-          return
-        }
+          // Check subscription requirement
+          if (requireSubscription && data.user?.subscriptionStatus !== "active") {
+            console.log("[v0] Subscription required but not active, redirecting...")
+            router.push("/subscription")
+            return
+          }
+        } else {
+          console.log("[v0] Auth check failed:", response.status)
+          setIsAuthenticated(false)
+          setUser(null)
 
-        if (requireSubscription && authenticated && !activeSubscription) {
-          router.push("/subscription")
-          return
+          if (requireAuth) {
+            router.push("/login")
+            return
+          }
         }
       } catch (error) {
-        console.error("Auth check failed:", error)
+        console.error("[v0] Auth check error:", error)
+        setIsAuthenticated(false)
+        setUser(null)
+
         if (requireAuth) {
           router.push("/login")
         }
@@ -70,7 +86,7 @@ export function AuthGuard({ children, requireAuth = true, requireSubscription = 
     return null
   }
 
-  if (requireSubscription && isAuthenticated && !hasActiveSubscription) {
+  if (requireSubscription && isAuthenticated && user?.subscriptionStatus !== "active") {
     return null
   }
 
